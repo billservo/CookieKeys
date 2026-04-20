@@ -1,31 +1,33 @@
 /* =========================================================
    COOKIE KEYS (Cookie Clicker Mod)
    ---------------------------------------------------------
-   VERSION: 1.4.0
+   VERSION: 1.5.0
 
    PURPOSE:
    - Loads CookieShortcuts mod safely
-   - Injects stable Import / Export UI into Cookie Clicker Options
-   - Supports JSON shortcut profiles
-   - Forces re-apply of imported configs
-   - Survives Options menu re-renders
+   - Provides Import / Export UI inside Options menu
+   - Validates JSON before import
+   - Handles empty / invalid input gracefully
+   - Persists imported profiles to localStorage
+   - Attempts runtime rebind hooks (best-effort)
 
    ARCHITECTURE:
    Cookie Clicker → CookieShortcuts → CookieKeys (UI + persistence layer)
 
    CHANGELOG:
-   - v1.4.0: Fixed import doing nothing (added re-init + refresh hooks)
-   - v1.4.0: Fixed UI disappearing after reload (reinjection safe guard)
-   - v1.4.0: Improved MutationObserver stability and reset detection
+   - v1.5.0: Added input validation (empty + invalid JSON handling)
+   - v1.5.0: Added user feedback in UI box
+   - v1.5.0: Strengthened persistence via localStorage backup
+   - v1.5.0: Improved rebind attempt coverage for mod APIs
    ========================================================= */
 
 (function () {
 
     /* =====================================================
-       VERSION LOGGING
+       VERSION
        ===================================================== */
 
-    var COOKIE_KEYS_VERSION = "1.4.0";
+    var COOKIE_KEYS_VERSION = "1.5.0";
 
     console.log("[CookieKeys] version:", COOKIE_KEYS_VERSION);
     console.log("[CookieKeys] script loaded");
@@ -62,7 +64,7 @@
 
 
     /* =====================================================
-       UI OBSERVER (RENDER-SAFE)
+       UI OBSERVER
        ===================================================== */
 
     function observeUI() {
@@ -74,10 +76,12 @@
             var menu = document.getElementById("menu");
             if (!menu) return;
 
-            var panelExists = document.getElementById("cookiekeys-panel");
+            var alreadyExists = document.getElementById("cookiekeys-panel");
 
-            // If DOM was rebuilt, allow reinjection
-            if (!panelExists) injected = false;
+            if (alreadyExists) {
+                injected = true;
+                return;
+            }
 
             if (injected) return;
 
@@ -100,12 +104,10 @@
 
 
     /* =====================================================
-       UI INJECTION
+       UI
        ===================================================== */
 
     function injectUI(container) {
-
-        if (document.getElementById("cookiekeys-panel")) return;
 
         var panel = document.createElement("div");
         panel.id = "cookiekeys-panel";
@@ -125,6 +127,7 @@
             <button id="ck-import">Import</button>
 
             <textarea id="ck-box"
+                placeholder="Paste shortcut JSON here..."
                 style="width:100%;height:120px;margin-top:8px;
                        background:#111;color:#0f0;"></textarea>
         `;
@@ -136,7 +139,7 @@
 
 
     /* =====================================================
-       IMPORT / EXPORT CORE
+       DATA HANDLING
        ===================================================== */
 
     function getData() {
@@ -148,34 +151,44 @@
 
 
     function applyData(data) {
+
         if (!window.CookieShortcuts) {
             console.warn("[CookieKeys] CookieShortcuts not ready");
             return;
         }
 
-        if (window.CookieShortcuts.config) {
-            window.CookieShortcuts.config = data;
-        } else if (window.CookieShortcuts.bindings) {
-            window.CookieShortcuts.bindings = data;
-        } else {
+        // apply to all possible locations
+        window.CookieShortcuts.config = data;
+        window.CookieShortcuts.bindings = data;
+
+        try {
             Object.assign(window.CookieShortcuts, data);
+        } catch (e) {}
+
+        // persist backup (IMPORTANT for reload testing)
+        try {
+            localStorage.setItem("cookiekeys_profile", JSON.stringify(data));
+            console.log("[CookieKeys] saved to localStorage");
+        } catch (e) {
+            console.warn("[CookieKeys] localStorage failed:", e);
         }
 
-        console.log("[CookieKeys] applying imported data");
-
-        // 🔥 force reapply hooks (critical fix)
+        // attempt runtime rebuild (best effort)
         try {
             window.CookieShortcuts.init?.();
             window.CookieShortcuts.refresh?.();
             window.CookieShortcuts.update?.();
+            window.CookieShortcuts.rebind?.();
         } catch (e) {
-            console.warn("[CookieKeys] reapply error:", e);
+            console.warn("[CookieKeys] rebind attempt failed:", e);
         }
+
+        console.log("[CookieKeys] import applied");
     }
 
 
     /* =====================================================
-       UI BINDING
+       UI LOGIC
        ===================================================== */
 
     function bindUI() {
@@ -183,25 +196,39 @@
         var box = document.getElementById("ck-box");
 
         document.getElementById("ck-export").onclick = function () {
+
             var data = getData();
 
-            console.log("[CookieKeys] export:", data);
-
             box.value = JSON.stringify(data, null, 2);
+
+            console.log("[CookieKeys] exported");
         };
 
-        document.getElementById("ck-import").onclick = function () {
-            try {
-                var parsed = JSON.parse(box.value);
 
-                console.log("[CookieKeys] import:", parsed);
+        document.getElementById("ck-import").onclick = function () {
+
+            var raw = box.value;
+
+            // EMPTY CHECK
+            if (!raw || !raw.trim()) {
+                console.warn("[CookieKeys] import ignored: empty input");
+                box.value = "⚠ Error: No JSON provided";
+                return;
+            }
+
+            // PARSE CHECK
+            try {
+                var parsed = JSON.parse(raw);
+
+                console.log("[CookieKeys] importing:", parsed);
 
                 applyData(parsed);
 
-                console.log("[CookieKeys] import complete");
+                box.value = "✔ Import successful";
 
             } catch (e) {
                 console.error("[CookieKeys] invalid JSON:", e);
+                box.value = "⚠ Error: Invalid JSON";
             }
         };
     }
