@@ -1,186 +1,65 @@
-/* =========================================================
-   COOKIE KEYS (Cookie Clicker Mod)
-   ---------------------------------------------------------
-   VERSION: 1.5.1
-
-   FIXES:
-   - UI disappearing due to MutationObserver race conditions
-   - Over-aggressive "already injected" blocking
-   - DOM rebuild wiping panel silently
-
-   GOAL:
-   - UI ALWAYS PRESENT when Options is open
-   - Safe reinjection on DOM rebuild
-   ========================================================= */
-
-(function () {
-
-    var COOKIE_KEYS_VERSION = "1.5.1";
-
-    console.log("[CookieKeys] version:", COOKIE_KEYS_VERSION);
-
-
-    var CONFIG = {
-        COOKIE_SHORTCUTS_URL:
-            "https://mastarcheeze.github.io/cookie-clicker-mods/cookieshortcuts/main.js"
-    };
-
-
-    /* =====================================================
-       BOOTSTRAP
-       ===================================================== */
-
-    function waitForGame() {
-        if (typeof Game !== "undefined") start();
-        else setTimeout(waitForGame, 100);
-    }
-
-    waitForGame();
-
-    function start() {
-        console.log("[CookieKeys] start");
-
-        Game.LoadMod(CONFIG.COOKIE_SHORTCUTS_URL);
-
-        observeUI();
-    }
-
-
-    /* =====================================================
-       UI OBSERVER (RELIABLE VERSION)
-       ===================================================== */
-
-    function observeUI() {
-
-        var observer = new MutationObserver(function () {
-
-            var menu = document.getElementById("menu");
+CookieShortcuts.UpdateMenu = (function (sub) {
+    return function () {
+        sub();
+        if (Game.onMenu == 'prefs') {
+            var menu = l('menu');
             if (!menu) return;
 
-            var container = menu.querySelector(".subsection") || menu;
-            if (!container) return;
+            // === NEW: BACKUP AND RESTORE SECTION ===
+            var restoreSection = document.createElement('div');
+            restoreSection.className = 'section';
+            restoreSection.innerHTML = `
+                <div class="title" style="color:#ecc606;">Backup and Restore</div>
+                <div class="listing">
+                    <div class="optionBox" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #444;">
+                        <div style="margin-bottom:10px;">
+                            <input type="file" id="cs_file_import" accept=".json" style="display:none;">
+                            <a class="smallFancyButton" onclick="l('cs_file_import').click();">Load Backup File</a>
+                            <span style="font-size:11px; opacity:0.6; margin-left:10px;">Select your 2026-04-17 JSON</span>
+                        </div>
+                        <div style="margin-bottom:5px; font-size:12px;">Or paste JSON below:</div>
+                        <textarea id="cs_text_import" style="width:100%; height:60px; background:rgba(0,0,0,0.5); color:#fff; border:1px solid #333; font-family:monospace; font-size:10px;"></textarea>
+                        <div style="margin-top:10px;">
+                            <a class="smallFancyButton" onclick="CookieShortcuts.ManualImport();">Apply Pasted JSON</a>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Inject at the top of the menu
+            menu.insertBefore(restoreSection, menu.firstChild);
 
-            ensureUI(container);
-        });
+            // Add Event Listener for File Input
+            l('cs_file_import').onchange = function(e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    CookieShortcuts.ProcessImport(e.target.result);
+                };
+                reader.readAsText(file);
+            };
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-    }
+            // Define the Processing Logic
+            CookieShortcuts.ProcessImport = function(content) {
+                try {
+                    var parsed = JSON.parse(content);
+                    CookieShortcuts.config = parsed;
+                    localStorage.setItem('CookieShortcuts', JSON.stringify(CookieShortcuts.config));
+                    Game.Popup('Shortcuts Restored');
+                    Game.UpdateMenu();
+                } catch (err) {
+                    Game.Popup('Error: Invalid JSON format');
+                }
+            };
 
+            CookieShortcuts.ManualImport = function() {
+                var content = l('cs_text_import').value;
+                if (content) CookieShortcuts.ProcessImport(content);
+            };
+            // === END BACKUP AND RESTORE SECTION ===
 
-    /* =====================================================
-       UI GUARANTEE (NO SINGLE-SHOT LOGIC)
-       ===================================================== */
-
-    function ensureUI(container) {
-
-        var existing = document.getElementById("cookiekeys-panel");
-
-        // If missing, create it
-        if (!existing) {
-            injectUI(container);
-            console.log("[CookieKeys] UI created");
-        }
-
-        // If exists but lost container, reattach it
-        if (existing && existing.parentNode !== container) {
-            container.appendChild(existing);
-            console.log("[CookieKeys] UI reattached");
-        }
-    }
-
-
-    function injectUI(container) {
-
-        var panel = document.createElement("div");
-        panel.id = "cookiekeys-panel";
-
-        panel.style.margin = "12px 0";
-        panel.style.padding = "10px";
-        panel.style.border = "1px solid #555";
-        panel.style.background = "#1f1f1f";
-        panel.style.color = "#fff";
-
-        panel.innerHTML = `
-            <div style="font-weight:bold;margin-bottom:8px;">
-                CookieKeys v${COOKIE_KEYS_VERSION}
-            </div>
-
-            <button id="ck-export">Export</button>
-            <button id="ck-import">Import</button>
-
-            <textarea id="ck-box"
-                placeholder="Paste JSON here..."
-                style="width:100%;height:120px;margin-top:8px;
-                       background:#111;color:#0f0;"></textarea>
-        `;
-
-        container.appendChild(panel);
-
-        bindUI();
-    }
-
-
-    /* =====================================================
-       DATA
-       ===================================================== */
-
-    function getData() {
-        return window.CookieShortcuts?.config
-            || window.CookieShortcuts?.bindings
-            || window.CookieShortcuts
-            || {};
-    }
-
-
-    function applyData(data) {
-
-        if (!window.CookieShortcuts) return;
-
-        window.CookieShortcuts.config = data;
-        window.CookieShortcuts.bindings = data;
-
-        try {
-            Object.assign(window.CookieShortcuts, data);
-        } catch (e) {}
-
-        try {
-            window.CookieShortcuts.init?.();
-            window.CookieShortcuts.refresh?.();
-            window.CookieShortcuts.update?.();
-            window.CookieShortcuts.rebind?.();
-        } catch (e) {}
-    }
-
-
-    /* =====================================================
-       UI EVENTS
-       ===================================================== */
-
-    function bindUI() {
-
-        var box = document.getElementById("ck-box");
-
-        document.getElementById("ck-export").onclick = function () {
-            box.value = JSON.stringify(getData(), null, 2);
-        };
-
-        document.getElementById("ck-import").onclick = function () {
-
-            if (!box.value || !box.value.trim()) {
-                box.value = "⚠ empty JSON";
-                return;
-            }
-
-            try {
-                applyData(JSON.parse(box.value));
-                box.value = "✔ imported";
-            } catch (e) {
-                box.value = "⚠ invalid JSON";
-            }
-        };
-    }
-
-})();
+            // Original "General" Section follows...
+            var generalDiv = document.createElement('div');
+            generalDiv.className = 'section';
+            // ... [Rest of the original script follows here]
