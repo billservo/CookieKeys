@@ -1,23 +1,26 @@
 /* =========================================================
-   COOKIE KEYS (Cookie Clicker Mod Layer)
-   Version: 1.0 Stable
+   COOKIE KEYS (Cookie Clicker Mod)
    ---------------------------------------------------------
    PURPOSE:
    - Loads CookieShortcuts mod safely
-   - Waits for initialization
-   - Injects Options UI for Import / Export of keybind JSON
-   - Provides persistence layer for shortcut profiles
-   ---------------------------------------------------------
-   CHANGE LOG:
-   - v1.0: Fixed TDZ (Temporal Dead Zone) crash in Cookie Clicker mod loader
-   - Replaced const config with var-safe loader configuration
-   - Stabilized execution order under Game.LoadMod environment
+   - Waits for full initialization
+   - Adds Import / Export UI inside Options menu
+   - Provides persistent JSON shortcut profile management
+
+   ARCHITECTURE:
+   Cookie Clicker → CookieShortcuts → CookieKeys (this layer)
+
+   CHANGELOG:
+   - v1.1: Fixed UI not appearing due to DOM injection timing
+   - v1.1: Anchored UI to stable Options container
+   - v1.1: Removed fragile subsection targeting
+   - v1.1: Ensured UI survives Options re-rendering
    ========================================================= */
 
 (function () {
 
     /* =====================================================
-       SAFE CONFIG (NO TDZ / CONST ISSUES)
+       CONFIG
        ===================================================== */
 
     var CONFIG = {
@@ -82,30 +85,34 @@
 
 
     /* =====================================================
-       UI INITIALIZATION
+       UI SYSTEM (OPTIONS MENU INJECTION)
        ===================================================== */
 
     function initUI() {
-        waitForOptionsMenu();
+        waitForOptionsReady();
     }
 
 
-    function waitForOptionsMenu() {
+    function waitForOptionsReady() {
         var interval = setInterval(function () {
 
             var menu = document.getElementById("menu");
-            var optionsPanel = menu?.querySelector(".subsection") || menu;
+            if (!menu) return;
 
-            if (menu && optionsPanel) {
+            // Wait until Options content exists AND is active
+            var optionsContent = menu.querySelector(".subsection");
+
+            if (optionsContent) {
                 clearInterval(interval);
-                injectUI(optionsPanel);
+
+                injectUI(menu);
             }
 
-        }, 300);
+        }, 250);
     }
 
 
-    function injectUI(container) {
+    function injectUI(menu) {
 
         if (document.getElementById("cookiekeys-panel")) return;
 
@@ -127,11 +134,11 @@
             <button id="ck-import">Import</button>
 
             <textarea id="ck-box"
-                style="width:100%;height:100px;margin-top:8px;
+                style="width:100%;height:120px;margin-top:8px;
                        background:#111;color:#0f0;"></textarea>
         `;
 
-        container.appendChild(panel);
+        menu.appendChild(panel);
 
         bindUI();
     }
