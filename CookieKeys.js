@@ -1,14 +1,30 @@
 /* =========================================================
-   COOKIE KEYS (SIMPLIFIED & ROBUST)
+   COOKIE KEYS (VERSIONED STABLE BUILD)
    ---------------------------------------------------------
+   VERSION: 1.2.0
+
    PURPOSE:
-   - Loads CookieShortcuts (optional dependency)
-   - Adds stable UI to Cookie Clicker Options menu
-   - Handles import/export of shortcut JSON
-   - DOES NOT depend on CookieShortcuts DOM
+   - Loads CookieShortcuts safely
+   - Injects Import/Export UI into Cookie Clicker
+   - Provides JSON shortcut persistence
+   - Adds explicit version logging for debugging
+
+   CHANGELOG:
+   - v1.2.0: Added explicit versioning + startup trace logs
+   - v1.2.0: Added guaranteed execution confirmation logs
    ========================================================= */
 
 (function () {
+
+    /* =====================================================
+       VERSION INFO (ALWAYS LOGGED)
+       ===================================================== */
+
+    var COOKIE_KEYS_VERSION = "1.2.0";
+
+    console.log("[CookieKeys] version:", COOKIE_KEYS_VERSION);
+    console.log("[CookieKeys] script loaded");
+
 
     /* =====================================================
        CONFIG
@@ -32,40 +48,76 @@
     waitForGame();
 
     function start() {
-        console.log("[CookieKeys] booting");
+        console.log("[CookieKeys] start() fired");
 
         Game.LoadMod(CONFIG.COOKIE_SHORTCUTS_URL);
 
-        initUI(); // IMPORTANT: no dependency waiting needed for UI
+        waitForCookieShortcuts();
     }
 
 
     /* =====================================================
-       UI (INDEPENDENT OF COOKIE SHORTCUTS)
+       COOKIE SHORTCUTS READY CHECK
+       ===================================================== */
+
+    function waitForCookieShortcuts() {
+        var interval = setInterval(function () {
+
+            if (window.CookieShortcuts) {
+                clearInterval(interval);
+
+                console.log("[CookieKeys] CookieShortcuts detected");
+                console.log("[CookieKeys] proceeding to UI injection");
+
+                try {
+                    window.CookieShortcuts.init?.();
+                } catch (e) {
+                    console.warn("[CookieKeys] CookieShortcuts init error:", e);
+                }
+
+                initUI();
+            }
+
+        }, 50);
+    }
+
+
+    /* =====================================================
+       UI INJECTION
        ===================================================== */
 
     function initUI() {
-        waitForMenu();
+        console.log("[CookieKeys] initUI()");
+        observeMenu();
     }
 
-    function waitForMenu() {
-        var interval = setInterval(function () {
+
+    function observeMenu() {
+
+        var injected = false;
+
+        var observer = new MutationObserver(function () {
 
             var menu = document.getElementById("menu");
-            if (!menu) return;
+            if (!menu || injected) return;
 
-            // Options panel always exists once menu exists
+            console.log("[CookieKeys] injecting UI into menu");
+
             injectUI(menu);
+            injected = true;
 
-            clearInterval(interval);
+            console.log("[CookieKeys] UI injection complete");
 
-        }, 250);
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
     }
 
 
     function injectUI(menu) {
-
-        if (document.getElementById("cookiekeys-panel")) return;
 
         var panel = document.createElement("div");
         panel.id = "cookiekeys-panel";
@@ -78,7 +130,7 @@
 
         panel.innerHTML = `
             <div style="font-weight:bold;margin-bottom:8px;">
-                CookieKeys (Shortcut Import / Export)
+                CookieKeys v${COOKIE_KEYS_VERSION}
             </div>
 
             <button id="ck-export">Export</button>
@@ -96,7 +148,7 @@
 
 
     /* =====================================================
-       IMPORT / EXPORT (DIRECT)
+       IMPORT / EXPORT
        ===================================================== */
 
     function getData() {
@@ -107,10 +159,7 @@
     }
 
     function applyData(data) {
-        if (!window.CookieShortcuts) {
-            console.warn("[CookieKeys] CookieShortcuts not loaded yet");
-            return;
-        }
+        if (!window.CookieShortcuts) return;
 
         if (window.CookieShortcuts.config) {
             window.CookieShortcuts.config = data;
@@ -127,16 +176,25 @@
         var box = document.getElementById("ck-box");
 
         document.getElementById("ck-export").onclick = function () {
-            box.value = JSON.stringify(getData(), null, 2);
-            console.log("[CookieKeys] exported");
+            var data = getData();
+
+            console.log("[CookieKeys] exporting data:", data);
+
+            box.value = JSON.stringify(data, null, 2);
         };
 
         document.getElementById("ck-import").onclick = function () {
             try {
-                applyData(JSON.parse(box.value));
-                console.log("[CookieKeys] imported");
+                var parsed = JSON.parse(box.value);
+
+                console.log("[CookieKeys] importing data:", parsed);
+
+                applyData(parsed);
+
+                console.log("[CookieKeys] import complete");
+
             } catch (e) {
-                console.error("[CookieKeys] invalid JSON", e);
+                console.error("[CookieKeys] import failed:", e);
             }
         };
     }
