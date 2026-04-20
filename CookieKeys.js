@@ -1,15 +1,29 @@
 /* =========================================================
-   CookieKeys.js (FIXED VERSION)
+   COOKIE KEYS (Cookie Clicker Mod Layer)
+   Version: 1.0 Stable
+   ---------------------------------------------------------
+   PURPOSE:
+   - Loads CookieShortcuts mod safely
+   - Waits for initialization
+   - Injects Options UI for Import / Export of keybind JSON
+   - Provides persistence layer for shortcut profiles
+   ---------------------------------------------------------
+   CHANGE LOG:
+   - v1.0: Fixed TDZ (Temporal Dead Zone) crash in Cookie Clicker mod loader
+   - Replaced const config with var-safe loader configuration
+   - Stabilized execution order under Game.LoadMod environment
    ========================================================= */
 
 (function () {
 
     /* =====================================================
-       CONSTANTS (MUST BE FIRST)
+       SAFE CONFIG (NO TDZ / CONST ISSUES)
        ===================================================== */
 
-    const COOKIE_SHORTCUTS_URL =
-        "https://mastarcheeze.github.io/cookie-clicker-mods/cookieshortcuts/main.js";
+    var CONFIG = {
+        COOKIE_SHORTCUTS_URL:
+            "https://mastarcheeze.github.io/cookie-clicker-mods/cookieshortcuts/main.js"
+    };
 
 
     /* =====================================================
@@ -40,13 +54,14 @@
     function loadCookieShortcuts() {
         console.log("[CookieKeys] loading CookieShortcuts");
 
-        Game.LoadMod(COOKIE_SHORTCUTS_URL);
+        Game.LoadMod(CONFIG.COOKIE_SHORTCUTS_URL);
 
         waitForCookieShortcuts();
     }
 
+
     function waitForCookieShortcuts() {
-        const interval = setInterval(() => {
+        var interval = setInterval(function () {
 
             if (window.CookieShortcuts) {
                 clearInterval(interval);
@@ -67,18 +82,19 @@
 
 
     /* =====================================================
-       UI
+       UI INITIALIZATION
        ===================================================== */
 
     function initUI() {
         waitForOptionsMenu();
     }
 
-    function waitForOptionsMenu() {
-        const interval = setInterval(() => {
 
-            const menu = document.getElementById("menu");
-            const optionsPanel = menu?.querySelector(".subsection") || menu;
+    function waitForOptionsMenu() {
+        var interval = setInterval(function () {
+
+            var menu = document.getElementById("menu");
+            var optionsPanel = menu?.querySelector(".subsection") || menu;
 
             if (menu && optionsPanel) {
                 clearInterval(interval);
@@ -88,11 +104,12 @@
         }, 300);
     }
 
+
     function injectUI(container) {
 
         if (document.getElementById("cookiekeys-panel")) return;
 
-        const panel = document.createElement("div");
+        var panel = document.createElement("div");
         panel.id = "cookiekeys-panel";
 
         panel.style.marginTop = "12px";
@@ -131,6 +148,7 @@
             || {};
     }
 
+
     function applyShortcutData(data) {
         if (!window.CookieShortcuts) return;
 
@@ -145,19 +163,20 @@
         window.CookieShortcuts.init?.();
     }
 
+
     function bindUI() {
 
-        const box = document.getElementById("ck-box");
+        var box = document.getElementById("ck-box");
 
-        document.getElementById("ck-export").onclick = () => {
-            const data = getShortcutData();
+        document.getElementById("ck-export").onclick = function () {
+            var data = getShortcutData();
             box.value = JSON.stringify(data, null, 2);
             console.log("[CookieKeys] exported");
         };
 
-        document.getElementById("ck-import").onclick = () => {
+        document.getElementById("ck-import").onclick = function () {
             try {
-                const data = JSON.parse(box.value);
+                var data = JSON.parse(box.value);
                 applyShortcutData(data);
                 console.log("[CookieKeys] imported");
             } catch (e) {
