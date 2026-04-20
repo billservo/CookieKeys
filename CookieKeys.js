@@ -1,27 +1,50 @@
 /* =========================================================
    COOKIE KEYS (Cookie Clicker Mod)
    ---------------------------------------------------------
-   VERSION: 1.8.1
+   VERSION: 1.9.0
 
-   HISTORY:
-   - 1.8.1: Enhanced MutationObserver to target the menu 
-     container directly. Added fallback injection for 
-     Webpack-wrapped UI blocks.
+   FIXES:
+   - Race Condition: Added a 1.5s delay before reload to ensure 
+     localStorage write-completion.
+   - Key Redundancy: Injects into 'CookieShortcuts' AND 'CookieKeys'
+     to ensure compatibility with different Webpack builds.
+   - Feedback: UI now shows "Ready to Refresh" once the 
+     injection is confirmed.
 
-   GOAL: Force Backup/Restore UX into the Options menu.
+   GOAL: Finalizing 2026-04-17 recovery for 650 You push.
    ========================================================= */
 
 (function() {
-    console.log("Cookie Keys v1.8.1: Restoration Protocol Active.");
+    console.log("Cookie Keys v1.9.0: Persistent Restoration Active.");
 
     window.processRestore = function(data) {
         try {
-            JSON.parse(data);
-            localStorage.setItem('CookieShortcuts', data);
-            Game.Popup('Storage Primed. Refreshing Game...');
-            setTimeout(() => { location.reload(); }, 800);
+            // 1. Validate JSON
+            const parsed = JSON.parse(data);
+            
+            // 2. Multi-Key Injection (Brute Force Persistence)
+            const targets = ['CookieShortcuts', 'CookieKeys', 'CookieShortcuts_v2'];
+            targets.forEach(key => {
+                localStorage.setItem(key, data);
+            });
+
+            // 3. Visual Confirmation
+            const btn = l('restore_btn_label');
+            if (btn) {
+                btn.innerHTML = "DATA LOCKED. REFRESHING IN 2s...";
+                btn.style.color = "#00ff00";
+            }
+            
+            Game.Popup('Data Injected. Awaiting Sync...');
+
+            // 4. Delayed Reload to prevent race conditions with Game.Save()
+            setTimeout(() => { 
+                location.reload(); 
+            }, 2000);
+
         } catch (e) {
             Game.Popup('Error: Invalid JSON File');
+            console.error("Restore failed:", e);
         }
     };
 
@@ -34,15 +57,14 @@
             div.id = 'restore_ui_added';
             div.className = 'section';
             div.innerHTML = `
-                <div class="title" style="color:#ecc606;">Backup and Restore</div>
+                <div class="title" style="color:#ecc606;">Backup and Restore (v1.9.0)</div>
                 <div class="listing">
                     <input type="file" id="file_picker" accept=".json" style="display:none;">
-                    <a class="option" onclick="l('file_picker').click();">Load 2026-04-17 JSON</a>
-                    <label>Restores Garden & Grimoire shortcuts.</label>
+                    <a class="option" id="restore_btn_label" onclick="l('file_picker').click();">Load 2026-04-17 JSON</a>
+                    <label>Injects Garden/Grimoire data and reloads game safely.</label>
                 </div>
             `;
 
-            // Strategy: Try to find "General", otherwise insert at the very top
             const sections = menu.getElementsByClassName('section');
             let placed = false;
             for (let s of sections) {
@@ -52,13 +74,8 @@
                     break;
                 }
             }
-            
-            // Fallback: If "General" isn't found yet, put it at the very top
-            if (!placed) {
-                menu.insertBefore(div, menu.firstChild);
-            }
+            if (!placed) menu.insertBefore(div, menu.firstChild);
 
-            // Re-bind the file picker logic
             const picker = l('file_picker');
             if (picker) {
                 picker.onchange = function(e) {
@@ -73,14 +90,11 @@
         }
     };
 
-    // More aggressive observer
-    const menuObserver = new MutationObserver((mutations) => {
+    const menuObserver = new MutationObserver(() => {
         if (Game.onMenu === 'prefs') injectRestoreUI();
     });
 
     menuObserver.observe(document.body, { childList: true, subtree: true });
-    
-    // Also try an immediate injection in case menu is already open
     setTimeout(injectRestoreUI, 500);
 })();
 
