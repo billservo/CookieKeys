@@ -1,68 +1,71 @@
 /* =========================================================
    COOKIE KEYS (Cookie Clicker Mod)
    ---------------------------------------------------------
-   VERSION: 1.7.0
+   VERSION: 1.8.1
 
-   CHangelog:
-   - Fixed: Webpack bundle scoping prevented UI injection.
-   - Fixed: Restored original UX by patching the internal 
-     'render' function of the module.
-   - Added: "Backup and Restore" section added as a native 
-     category within the original mod panel.
+   HISTORY:
+   - 1.8.1: Enhanced MutationObserver to target the menu 
+     container directly. Added fallback injection for 
+     Webpack-wrapped UI blocks.
+
+   GOAL: Force Backup/Restore UX into the Options menu.
    ========================================================= */
 
 (function() {
-    console.log("Cookie Keys v1.7.0: Initializing Restoration Protocol...");
+    console.log("Cookie Keys v1.8.1: Restoration Protocol Active.");
 
-    // This targets the internal Game.UpdateMenu wrapper used by the bundle
-    const oldUpdateMenu = Game.UpdateMenu;
+    window.processRestore = function(data) {
+        try {
+            JSON.parse(data);
+            localStorage.setItem('CookieShortcuts', data);
+            Game.Popup('Storage Primed. Refreshing Game...');
+            setTimeout(() => { location.reload(); }, 800);
+        } catch (e) {
+            Game.Popup('Error: Invalid JSON File');
+        }
+    };
 
-    Game.UpdateMenu = function() {
-        oldUpdateMenu();
+    const injectRestoreUI = () => {
+        if (Game.onMenu !== 'prefs') return;
+        
+        const menu = l('menu');
+        if (menu && !l('restore_ui_added')) {
+            const div = document.createElement('div');
+            div.id = 'restore_ui_added';
+            div.className = 'section';
+            div.innerHTML = `
+                <div class="title" style="color:#ecc606;">Backup and Restore</div>
+                <div class="listing">
+                    <input type="file" id="file_picker" accept=".json" style="display:none;">
+                    <a class="option" onclick="l('file_picker').click();">Load 2026-04-17 JSON</a>
+                    <label>Restores Garden & Grimoire shortcuts.</label>
+                </div>
+            `;
 
-        // Only act if we are in the Options menu
-        if (Game.onMenu === 'prefs') {
-            const menu = l('menu');
-            if (!menu) return;
-
-            // Find the Mod's container (the bundle creates a specific div for its UI)
-            // We search for the first title that says "General" to find our insertion point
+            // Strategy: Try to find "General", otherwise insert at the very top
             const sections = menu.getElementsByClassName('section');
-            let targetSection = null;
-
+            let placed = false;
             for (let s of sections) {
-                if (s.innerHTML.includes('General')) {
-                    targetSection = s;
+                if (s.innerText.includes('General')) {
+                    s.parentNode.insertBefore(div, s);
+                    placed = true;
                     break;
                 }
             }
+            
+            // Fallback: If "General" isn't found yet, put it at the very top
+            if (!placed) {
+                menu.insertBefore(div, menu.firstChild);
+            }
 
-            if (targetSection && !l('rescuetool_ui')) {
-                const backupDiv = document.createElement('div');
-                backupDiv.id = 'rescuetool_ui';
-                backupDiv.className = 'section';
-                backupDiv.innerHTML = `
-                    <div class="title" style="color:#ecc606;">Backup and Restore</div>
-                    <div class="listing">
-                        <input type="file" id="rescuetool_file" accept=".json" style="display:none;">
-                        <a class="option" onclick="l('rescuetool_file').click();">Import JSON File</a>
-                        <label>Select CookieShortcuts_Backup_2026-04-17.json</label>
-                    </div>
-                    <div class="listing">
-                        <textarea id="rescuetool_text" style="width:100%; height:40px; background:rgba(0,0,0,0.5); color:#fff; border:1px solid #444; font-size:10px;" placeholder="Paste JSON here..."></textarea>
-                        <a class="option" onclick="window.RescueRestore();">Apply Paste</a>
-                    </div>
-                `;
-
-                // Insert it exactly above the "General" section so it feels native
-                targetSection.parentNode.insertBefore(backupDiv, targetSection);
-
-                // File handler
-                l('rescuetool_file').onchange = function(e) {
+            // Re-bind the file picker logic
+            const picker = l('file_picker');
+            if (picker) {
+                picker.onchange = function(e) {
                     const file = e.target.files[0];
                     if (file) {
                         const reader = new FileReader();
-                        reader.onload = function(ev) { window.RescueProcess(ev.target.result); };
+                        reader.onload = (ev) => window.processRestore(ev.target.result);
                         reader.readAsText(file);
                     }
                 };
@@ -70,28 +73,20 @@
         }
     };
 
-    // Global helper for the buttons to talk to
-    window.RescueProcess = function(content) {
-        try {
-            JSON.parse(content); // Validate
-            localStorage.setItem('CookieKeys', content); // The bundle uses 'CookieKeys' or 'CookieShortcuts'
-            localStorage.setItem('CookieShortcuts', content); 
-            Game.Popup('Data Injected. Refresh (Ctrl+R) to activate.');
-        } catch (e) {
-            Game.Popup('Error: Invalid JSON');
-        }
-    };
+    // More aggressive observer
+    const menuObserver = new MutationObserver((mutations) => {
+        if (Game.onMenu === 'prefs') injectRestoreUI();
+    });
 
-    window.RescueRestore = function() {
-        const val = l('rescuetool_text').value;
-        if (val) window.RescueProcess(val);
-    };
-
-    Game.Notify('Cookie Keys v1.7.0', 'Restoration Hook Active', [16, 5]);
-    console.log("Cookie Keys v1.7.0: System Ready.");
+    menuObserver.observe(document.body, { childList: true, subtree: true });
+    
+    // Also try an immediate injection in case menu is already open
+    setTimeout(injectRestoreUI, 500);
 })();
 
-/* PASTE THE ENTIRE ORIGINAL WEBPACK BUNDLE CONTENT BELOW THIS LINE */
+/* =========================================================
+   PASTE THE ENTIRE CONTENT OF CookieShortcuts.js BELOW
+   ========================================================= */
 
 /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
