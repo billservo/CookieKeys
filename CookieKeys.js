@@ -1,20 +1,11 @@
 /* =========================================================
-   COOKIE KEYS (Cookie Clicker Mod)
+   COOKIE KEYS (SIMPLIFIED & ROBUST)
    ---------------------------------------------------------
    PURPOSE:
-   - Loads CookieShortcuts mod safely
-   - Waits for full initialization
-   - Adds Import / Export UI inside Options menu
-   - Provides persistent JSON shortcut profile management
-
-   ARCHITECTURE:
-   Cookie Clicker → CookieShortcuts → CookieKeys (this layer)
-
-   CHANGELOG:
-   - v1.1: Fixed UI not appearing due to DOM injection timing
-   - v1.1: Anchored UI to stable Options container
-   - v1.1: Removed fragile subsection targeting
-   - v1.1: Ensured UI survives Options re-rendering
+   - Loads CookieShortcuts (optional dependency)
+   - Adds stable UI to Cookie Clicker Options menu
+   - Handles import/export of shortcut JSON
+   - DOES NOT depend on CookieShortcuts DOM
    ========================================================= */
 
 (function () {
@@ -34,79 +25,39 @@
        ===================================================== */
 
     function waitForGame() {
-        if (typeof Game !== "undefined") {
-            start();
-        } else {
-            setTimeout(waitForGame, 100);
-        }
+        if (typeof Game !== "undefined") start();
+        else setTimeout(waitForGame, 100);
     }
 
     waitForGame();
 
-
     function start() {
-        console.log("[CookieKeys] starting loader chain");
-        loadCookieShortcuts();
-    }
-
-
-    /* =====================================================
-       COOKIE SHORTCUTS LOADER
-       ===================================================== */
-
-    function loadCookieShortcuts() {
-        console.log("[CookieKeys] loading CookieShortcuts");
+        console.log("[CookieKeys] booting");
 
         Game.LoadMod(CONFIG.COOKIE_SHORTCUTS_URL);
 
-        waitForCookieShortcuts();
-    }
-
-
-    function waitForCookieShortcuts() {
-        var interval = setInterval(function () {
-
-            if (window.CookieShortcuts) {
-                clearInterval(interval);
-
-                console.log("[CookieKeys] CookieShortcuts ready");
-
-                try {
-                    window.CookieShortcuts.init?.();
-                } catch (e) {
-                    console.warn("[CookieKeys] init error:", e);
-                }
-
-                initUI();
-            }
-
-        }, 50);
+        initUI(); // IMPORTANT: no dependency waiting needed for UI
     }
 
 
     /* =====================================================
-       UI SYSTEM (OPTIONS MENU INJECTION)
+       UI (INDEPENDENT OF COOKIE SHORTCUTS)
        ===================================================== */
 
     function initUI() {
-        waitForOptionsReady();
+        waitForMenu();
     }
 
-
-    function waitForOptionsReady() {
+    function waitForMenu() {
         var interval = setInterval(function () {
 
             var menu = document.getElementById("menu");
             if (!menu) return;
 
-            // Wait until Options content exists AND is active
-            var optionsContent = menu.querySelector(".subsection");
+            // Options panel always exists once menu exists
+            injectUI(menu);
 
-            if (optionsContent) {
-                clearInterval(interval);
-
-                injectUI(menu);
-            }
+            clearInterval(interval);
 
         }, 250);
     }
@@ -119,7 +70,7 @@
         var panel = document.createElement("div");
         panel.id = "cookiekeys-panel";
 
-        panel.style.marginTop = "12px";
+        panel.style.margin = "12px 0";
         panel.style.padding = "10px";
         panel.style.border = "1px solid #555";
         panel.style.background = "#1f1f1f";
@@ -127,7 +78,7 @@
 
         panel.innerHTML = `
             <div style="font-weight:bold;margin-bottom:8px;">
-                CookieKeys – Shortcut Profiles
+                CookieKeys (Shortcut Import / Export)
             </div>
 
             <button id="ck-export">Export</button>
@@ -145,19 +96,21 @@
 
 
     /* =====================================================
-       IMPORT / EXPORT LOGIC
+       IMPORT / EXPORT (DIRECT)
        ===================================================== */
 
-    function getShortcutData() {
+    function getData() {
         return window.CookieShortcuts?.config
             || window.CookieShortcuts?.bindings
             || window.CookieShortcuts
             || {};
     }
 
-
-    function applyShortcutData(data) {
-        if (!window.CookieShortcuts) return;
+    function applyData(data) {
+        if (!window.CookieShortcuts) {
+            console.warn("[CookieKeys] CookieShortcuts not loaded yet");
+            return;
+        }
 
         if (window.CookieShortcuts.config) {
             window.CookieShortcuts.config = data;
@@ -166,8 +119,6 @@
         } else {
             Object.assign(window.CookieShortcuts, data);
         }
-
-        window.CookieShortcuts.init?.();
     }
 
 
@@ -176,15 +127,13 @@
         var box = document.getElementById("ck-box");
 
         document.getElementById("ck-export").onclick = function () {
-            var data = getShortcutData();
-            box.value = JSON.stringify(data, null, 2);
+            box.value = JSON.stringify(getData(), null, 2);
             console.log("[CookieKeys] exported");
         };
 
         document.getElementById("ck-import").onclick = function () {
             try {
-                var data = JSON.parse(box.value);
-                applyShortcutData(data);
+                applyData(JSON.parse(box.value));
                 console.log("[CookieKeys] imported");
             } catch (e) {
                 console.error("[CookieKeys] invalid JSON", e);
