@@ -1,26 +1,30 @@
 /* =========================================================
-   COOKIE KEYS (VERSIONED STABLE BUILD)
+   COOKIE KEYS (Cookie Clicker Mod)
    ---------------------------------------------------------
-   VERSION: 1.2.0
+   VERSION: 1.3.0
 
    PURPOSE:
-   - Loads CookieShortcuts safely
-   - Injects Import/Export UI into Cookie Clicker
-   - Provides JSON shortcut persistence
-   - Adds explicit version logging for debugging
+   - Loads CookieShortcuts mod
+   - Provides Import / Export UI for shortcut JSON
+   - Injects UI into ACTIVE Cookie Clicker Options panel
+   - Avoids DOM rebuild / hidden container issues
+
+   ARCHITECTURE:
+   Cookie Clicker → CookieShortcuts → CookieKeys (UI + persistence layer)
 
    CHANGELOG:
-   - v1.2.0: Added explicit versioning + startup trace logs
-   - v1.2.0: Added guaranteed execution confirmation logs
+   - v1.3.0: Fixed UI not appearing due to incorrect DOM injection target
+   - v1.3.0: Now injects into active visible Options subsection
+   - v1.3.0: Improved MutationObserver stability
    ========================================================= */
 
 (function () {
 
     /* =====================================================
-       VERSION INFO (ALWAYS LOGGED)
+       VERSION LOGGING (ALWAYS FIRST)
        ===================================================== */
 
-    var COOKIE_KEYS_VERSION = "1.2.0";
+    var COOKIE_KEYS_VERSION = "1.3.0";
 
     console.log("[CookieKeys] version:", COOKIE_KEYS_VERSION);
     console.log("[CookieKeys] script loaded");
@@ -48,65 +52,48 @@
     waitForGame();
 
     function start() {
-        console.log("[CookieKeys] start() fired");
+        console.log("[CookieKeys] start()");
 
         Game.LoadMod(CONFIG.COOKIE_SHORTCUTS_URL);
 
-        waitForCookieShortcuts();
+        observeUI();
     }
 
 
     /* =====================================================
-       COOKIE SHORTCUTS READY CHECK
+       UI OBSERVER (FIXED TARGETING)
        ===================================================== */
 
-    function waitForCookieShortcuts() {
-        var interval = setInterval(function () {
-
-            if (window.CookieShortcuts) {
-                clearInterval(interval);
-
-                console.log("[CookieKeys] CookieShortcuts detected");
-                console.log("[CookieKeys] proceeding to UI injection");
-
-                try {
-                    window.CookieShortcuts.init?.();
-                } catch (e) {
-                    console.warn("[CookieKeys] CookieShortcuts init error:", e);
-                }
-
-                initUI();
-            }
-
-        }, 50);
-    }
-
-
-    /* =====================================================
-       UI INJECTION
-       ===================================================== */
-
-    function initUI() {
-        console.log("[CookieKeys] initUI()");
-        observeMenu();
-    }
-
-
-    function observeMenu() {
+    function observeUI() {
 
         var injected = false;
 
         var observer = new MutationObserver(function () {
 
+            if (injected) return;
+
             var menu = document.getElementById("menu");
-            if (!menu || injected) return;
+            if (!menu) return;
 
-            console.log("[CookieKeys] injecting UI into menu");
+            // IMPORTANT FIX:
+            // target ACTIVE Options content, not just menu shell
+            var optionsContent =
+                menu.querySelector(".subsection") ||
+                menu.querySelector("#menu") ||
+                menu;
 
-            injectUI(menu);
+            if (!optionsContent) return;
+
+            var visible = window.getComputedStyle(optionsContent).display !== "none";
+            if (!visible) return;
+
+            console.log("[CookieKeys] injecting UI into Options");
+
+            injectUI(optionsContent);
+
             injected = true;
 
-            console.log("[CookieKeys] UI injection complete");
+            console.log("[CookieKeys] UI injected successfully");
 
         });
 
@@ -117,7 +104,13 @@
     }
 
 
-    function injectUI(menu) {
+    /* =====================================================
+       UI CREATION
+       ===================================================== */
+
+    function injectUI(container) {
+
+        if (document.getElementById("cookiekeys-panel")) return;
 
         var panel = document.createElement("div");
         panel.id = "cookiekeys-panel";
@@ -141,14 +134,14 @@
                        background:#111;color:#0f0;"></textarea>
         `;
 
-        menu.appendChild(panel);
+        container.appendChild(panel);
 
         bindUI();
     }
 
 
     /* =====================================================
-       IMPORT / EXPORT
+       IMPORT / EXPORT LOGIC
        ===================================================== */
 
     function getData() {
@@ -177,22 +170,14 @@
 
         document.getElementById("ck-export").onclick = function () {
             var data = getData();
-
-            console.log("[CookieKeys] exporting data:", data);
-
             box.value = JSON.stringify(data, null, 2);
+            console.log("[CookieKeys] exported");
         };
 
         document.getElementById("ck-import").onclick = function () {
             try {
-                var parsed = JSON.parse(box.value);
-
-                console.log("[CookieKeys] importing data:", parsed);
-
-                applyData(parsed);
-
-                console.log("[CookieKeys] import complete");
-
+                applyData(JSON.parse(box.value));
+                console.log("[CookieKeys] imported");
             } catch (e) {
                 console.error("[CookieKeys] import failed:", e);
             }
