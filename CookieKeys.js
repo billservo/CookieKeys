@@ -1,21 +1,20 @@
 /* =========================================================
-   CookieKeys.js (FULL STANDALONE VERSION)
-   - Loads CookieShortcuts
-   - Waits for readiness
-   - Injects Options UI for Import/Export
+   CookieKeys.js (FIXED VERSION)
    ========================================================= */
 
 (function () {
 
     /* =====================================================
-       BOOTSTRAP
+       CONSTANTS (MUST BE FIRST)
        ===================================================== */
 
-    function start() {
-        console.log("[CookieKeys] starting loader chain");
+    const COOKIE_SHORTCUTS_URL =
+        "https://mastarcheeze.github.io/cookie-clicker-mods/cookieshortcuts/main.js";
 
-        loadCookieShortcuts();
-    }
+
+    /* =====================================================
+       BOOTSTRAP
+       ===================================================== */
 
     function waitForGame() {
         if (typeof Game !== "undefined") {
@@ -28,12 +27,15 @@
     waitForGame();
 
 
-    /* =====================================================
-       LOAD COOKIE SHORTCUTS
-       ===================================================== */
+    function start() {
+        console.log("[CookieKeys] starting loader chain");
+        loadCookieShortcuts();
+    }
 
-    const COOKIE_SHORTCUTS_URL =
-        "https://mastarcheeze.github.io/cookie-clicker-mods/cookieshortcuts/main.js";
+
+    /* =====================================================
+       COOKIE SHORTCUTS LOADER
+       ===================================================== */
 
     function loadCookieShortcuts() {
         console.log("[CookieKeys] loading CookieShortcuts");
@@ -54,7 +56,7 @@
                 try {
                     window.CookieShortcuts.init?.();
                 } catch (e) {
-                    console.warn("[CookieKeys] CookieShortcuts init error:", e);
+                    console.warn("[CookieKeys] init error:", e);
                 }
 
                 initUI();
@@ -65,7 +67,7 @@
 
 
     /* =====================================================
-       COOKIE KEYS UI (OPTIONS PANEL)
+       UI
        ===================================================== */
 
     function initUI() {
@@ -119,7 +121,7 @@
 
 
     /* =====================================================
-       UI LOGIC
+       IMPORT / EXPORT LOGIC
        ===================================================== */
 
     function getShortcutData() {
